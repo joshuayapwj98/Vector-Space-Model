@@ -1,18 +1,17 @@
 #!/usr/bin/python3
-import re
 import nltk
 import sys
 from nltk.stem.porter import PorterStemmer
 import getopt
+import collections
+import math
+import pickle
 
-stemmer = PorterStemmer()
-
-# Global variable(ss)
-N = 0
-OPS_DICTIONARY = {'OR': 0, 'AND': 1, 'NOT': 2, '(': 3, ')': 3}
 
 def usage():
-    print("usage: " + sys.argv[0] + " -d dictionary-file -p postings-file -q file-of-queries -o output-file-of-results")
+    print("usage: " +
+          sys.argv[0] + " -d dictionary-file -p postings-file -q file-of-queries -o output-file-of-results")
+
 
 def run_search(dict_file, postings_file, queries_file, results_file):
     """
@@ -237,7 +236,7 @@ except getopt.GetoptError:
 
 for o, a in opts:
     if o == '-d':
-        dictionary_file  = a
+        dictionary_file = a
     elif o == '-p':
         postings_file = a
     elif o == '-q':
@@ -247,7 +246,7 @@ for o, a in opts:
     else:
         assert False, "unhandled option"
 
-if dictionary_file == None or postings_file == None or file_of_queries == None or file_of_output == None :
+if dictionary_file == None or postings_file == None or file_of_queries == None or file_of_output == None:
     usage()
     sys.exit(2)
 
