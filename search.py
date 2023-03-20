@@ -1,12 +1,21 @@
 #!/usr/bin/python3
 import nltk
 import sys
+import math
+import collections
+import pickle
 from nltk.stem.porter import PorterStemmer
 import getopt
 import collections
 import math
 import pickle
+import heapq
 
+stemmer = PorterStemmer()
+
+# Global variable(s)
+N = 0
+K = 10
 
 def usage():
     print("usage: " +
@@ -22,8 +31,17 @@ def run_search(dict_file, postings_file, queries_file, results_file):
     # This is an empty method
     # Pls implement your code in below
 
+    global N
+    
+    with open(dict_file, "rb") as dict_file:
+        # <word in string form, [document frequency, [start byte address, size in bytes]]>>
+        dictionary = pickle.load(dict_file)
+
+    with open("docData.txt", "rb") as doclen_file:
+        _document_weights = pickle.load(doclen_file)
+        N = len(_document_weights)
+
     with open(f'{queries_file}', "r") as queries_file,\
-        open(f'{postings_file}', 'r') as postings_file,\
         open(f'{results_file}', "w") as results_file:
     
         queries_text = queries_file.read()
@@ -35,196 +53,91 @@ def run_search(dict_file, postings_file, queries_file, results_file):
                 # Empty line in queries.txt
                 results_file.write("\n")
             else:
-                post_fix = get_postfix(query)
+                result = process_query(query, dictionary, postings_file, _document_weights)
+                output_builder = ', '.join(map(str, result))
+                results_file.write(output_builder + '\n')
+
 
 # ====================================================================
 # ====================== RANKING PROCESSING ==========================
 # ====================================================================
 
-def calculate_score(query_term_arr, term_dictionary, postings_list):
+def get_query_term_weight(query_term, termIndex):
+    return calculate_term_frequency(query_term, termIndex) * calculate_inverse_document_frequency(query_term, termIndex)
+
+def get_document_term_weight(document_term):
+    return 1 + math.log(document_term, 10)
+
+def calculate_term_frequency(term, termIndex):
+    return 1 + math.log(termIndex[term], 10)
+
+def calculate_inverse_document_frequency(term, termIndex):
     global N
-    Scores, Length = [0] * N
-    documents = []
-    for query_term in query_term_arr:
-        qt_weight = get_query_term_weight(query_term)
-        term_postings_list = get_postings_list(query_term, term_dictionary, postings_list)
-        for documentId in term_postings_list:
-            # Track which document is used for normalization
-            documents.append(documentId)
-            Scores[documentId] += get_document_term_weight(query_term) * qt_weight
-    
-    for documentId in documents:
-        Scores[documentId] = Scores[documentId] / Length[documentId]
-    return get_top_K_components(Scores)
+    return math.log(N/termIndex[term])
 
-        
+def get_top_K_components(scores_dic, K):
+    result = []
+    score_tuples = [(-score, doc_id) for doc_id, score in scores_dic.items()]
+    heapq.heapify(score_tuples)
+    top_K = heapq.nlargest(K, score_tuples)
+    for tuple in top_K:
+        result.append(tuple[1])
 
-def get_query_term_weight(query_term):
-    # TODO
-    return
+    return result
 
-def get_document_term_weight(query_term):
-    # TODO
-    return
-
-def calculate_term_frequency(term, term_dictionary):
-    # TODO
-    return
-
-def calculate_inverse_document_frequency(term, term_dictionary):
-    # TODO
-    return
-
-def get_top_K_components(Scores):
-    # TODO
-    return
 # ==============================================================
 # ====================== QUERY PROCESSING ======================
 # ==============================================================
 
-def process_query(tokens, term_dictionary, postings_file):
-    stack = []
-    for token in tokens:
-        if token not in OPS_DICTIONARY:
-            # Regular string term
-            stack.append(token)
-        else:
-            # Pop the next term in the stack and retrieve the postings_list 
-            left_operand = posting_list_type_check(stack.pop(), postings_file)
-            intermediate_result = []
-            if token == 'NOT':
-                # TODO: Perform 'NOT' operation
-                return
-            elif token == 'AND':
-                # Pop the next term in the stack and retrieve the postings_list 
-                right_operand = posting_list_type_check(stack.pop(), term_dictionary, postings_file)
-                operands = [left_operand, right_operand]
-                # TODO: Perform 'AND' operation on the operands and gets the postings_list
-                return
+def process_query(query, dictionary, postings_file, _document_weights):
+    global N
+    global K
+    queryIndex = collections.defaultdict(lambda: 0)
+    query = query.strip().split()
+    score_dic = collections.defaultdict(lambda: 0)
 
-            elif token == 'OR':
-                # Pop the next term in the stack and retrieve the postings_list 
-                right_operand = posting_list_type_check(stack.pop(), term_dictionary, postings_file)
-                operands = [left_operand, right_operand]
-                # TODO: Perform 'OR' operation on the operands and gets the postings_list
-                return
-            
-            # Append the result to the stack
-            stack.append(intermediate_result)
+    for word in query:
+        queryIndex[word] += 1
 
-    if len(stack) > 0:
-        query_result = stack.pop()
-        # Edge case: If there is only 1 querable term, retrieve the individual postings_list and return
-        if type(query_result) == str:
-            query_result = get_postings_list(query_result, term_dictionary, postings_file)
-        return query_result
-    else:
-        # TODO: 
-        # Edge case: No results for the query
-        return []
+    for term in queryIndex:
+        # for each word in the query, get the tf.idf
+        query_term_weight = get_query_term_weight(term, queryIndex)
+        postingList = single_word_query(term, dictionary, postings_file)
 
-def posting_list_type_check(operand, term_dictionary, postings_file):
-    """
-    Returns the postings_list of the operand if it is a string term.
-    """
-    if type(operand) != list:
-        # Get the operand's postings_list
-        operand = get_postings_list(operand, term_dictionary, postings_file)
-    return operand
-
-def get_postfix(infix):
-    """
-    Converts an infix expression to Reverse Polish Notation using the Shunting Yard algorithm.
-    """
-    # Initialize stack and queue
-    operators = []
-    postfix = []
-    global OPS_DICTIONARY
-
-    # Split the infix expression into tokens
-    tokens = tokenize(infix)
-
-    for token in tokens:
-        if token in OPS_DICTIONARY:
-            # Check if the top operator is in the ops_dict and the
-            # precedence of it is greater than the current token
-            while operators and operators[-1] in OPS_DICTIONARY and \
-                  OPS_DICTIONARY[operators[-1]] > OPS_DICTIONARY[token]:
-                # Append the operator into the postfix list
-                # Pop the operator from the operators stack
-                postfix.append(operators.pop())
-            operators.append(token)
-        elif token == '(':
-            operators.append(token)
-        elif token == ')':
-            while operators[-1] != "(":
-                postfix.append(operators.pop())
-            operators.pop()
-            if len(operators) == 0:
-                # Incomplete parenthesis, exit the program
-                exit()
-        else:
-            postfix.append(stemmer.stem(token.lower()))
-    
-    while operators:
-        postfix.append(operators.pop())
-    
-    postfix = [token for token in postfix if token not in ['(', ')']]
-    return postfix
-   
-
-def tokenize(query):
-    """
-    Tokenizes a query into individual terms
-    """
-    tokens = []
-    curr = ''
-
-    for char in query:
-        if char == '(' or char == ')':
-            if curr:
-                tokens.append(curr)
-                curr = ''
-            tokens.append(char)
-        elif char == ' ':
-            if curr:
-                tokens.append(curr)
-                curr = ''
-        else:
-            curr += char
-
-    if curr:
-        tokens.append(curr)
-
-    return tokens
+        # [documentId, frequency]
+        for frequencyPair in postingList:
+            document_term_weight = get_document_term_weight(frequencyPair[1])
+            # TODO: clarify here
+            document_normalized_weight = (document_term_weight / _document_weights[frequencyPair[0]])
+            query_normalized_weight = (query_term_weight / math.sqrt(query_term_weight * query_term_weight))
+            score_dic[frequencyPair[0]] += document_normalized_weight * query_normalized_weight
+    return get_top_K_components(score_dic, K)
 
 # ===================================================================
 # ====================== ACCESS INDEXING FILES ======================
 # ===================================================================
 
-def get_postings_list(term, term_dictionary, postings_file):
+def single_word_query(word, dictionary, postings_file):
     """
-    Returns the postings list for the given term.
+    Given a word in string, dictionary and a file of documents postings 
+    it returns a list with all the documents_posting found in the dictonary. 
+    Params: word: string, dictionary : a dictonray object loaded into memory, 
+            postings_file: string path to the file of postings_file 
+    Returns: a list object consisting of all the documents posting of the words 
+    in the dictonary. 
     """
-    if term not in term_dictionary:
-        return []
-    
-    file_ptr_pos = term_dictionary.get(term)[1]
+    stemmer = nltk.stem.PorterStemmer()
+    word = stemmer.stem(word.lower())  # case folding and stemming
 
-    # Move the file pointer to the start of the array
-    postings_file.seek(int(file_ptr_pos))
+    # -1 means that the word doesn't exist
+    [_, [start, sz]] = dictionary.get(word, [-1, [-1, -1]])
 
-    # Read the bytes from the file until the end of the line
-    line_bytes = postings_file.readline()
+    if start != -1:
+        with open(postings_file, "rb") as post_file:
+            post_file.seek(start)
+            return pickle.loads(post_file.read(sz))
 
-    # Remove the newline character from the end of the line
-    line_bytes = line_bytes.rstrip('\n')
-    
-    # Convert the string back to a list
-    postings_list = eval(line_bytes)
-
-    return postings_list
-
+    return []
 
 dictionary_file = postings_file = file_of_queries = output_file_of_results = None
 

@@ -7,6 +7,7 @@ import pickle
 import shutil
 import sys
 import collections
+import math
 
 # improvements:
 # use temp directory
@@ -65,6 +66,7 @@ def build_index(in_dir, out_dict, out_postings):
     inFiles = sorted(os.listdir(in_dir), key=lambda x: int(x))
     index = collections.defaultdict(lambda: [])
     documentLength = collections.defaultdict(lambda: 0)
+    documentWeight = collections.defaultdict(lambda: 0)
 
     for inFile in inFiles:
         with open(os.path.join(in_dir, inFile), "r", encoding="utf-8") as f:
@@ -75,9 +77,14 @@ def build_index(in_dir, out_dict, out_postings):
                 for word in words:
                     termFreq[word] += 1
                     documentLength[int(inFile)] += 1
-
+            
+            square_sum = 0
             for word in termFreq:
                 index[word].append([int(inFile), termFreq[word]])
+                square_sum += termFreq[word] * termFreq[word]
+
+            # add the normalization factor for computation in search
+            documentWeight[int(inFile)] = math.sqrt(square_sum)
 
     startIdx = 0
 
@@ -90,14 +97,14 @@ def build_index(in_dir, out_dict, out_postings):
             documentFrequency = len(index[word])
             index[word] = [documentFrequency, pointer]
 
-            print(word, index[word][1][0], index[word][1][1])
+            # print(word, index[word][1][0], index[word][1][1])
             startIdx += index[word][1][1]
 
     with open(out_dict, "wb") as dictFile:
         pickle.dump(dict(index), dictFile)
 
-    with open("docData.txt", "wb"):
-        pickle.dump(len(documentLength))
+    with open("docData.txt", "wb") as docData:
+        pickle.dump(dict(documentWeight), docData)
 
     # cleanup
     shutil.rmtree(TMP_DIR)
