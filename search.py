@@ -38,8 +38,8 @@ def run_search(dict_file, postings_file, queries_file, results_file):
         dictionary = pickle.load(dict_file)
 
     with open("docData.txt", "rb") as doclen_file:
-        _document_weights = pickle.load(doclen_file)
-        N = len(_document_weights)
+        document_normalization_factor = pickle.load(doclen_file)
+        N = len(document_normalization_factor)
 
     with open(f'{queries_file}', "r") as queries_file,\
         open(f'{results_file}', "w") as results_file:
@@ -53,7 +53,7 @@ def run_search(dict_file, postings_file, queries_file, results_file):
                 # Empty line in queries.txt
                 results_file.write("\n")
             else:
-                result = process_query(query, dictionary, postings_file, _document_weights)
+                result = process_query(query, dictionary, postings_file, document_normalization_factor)
                 output_builder = ', '.join(map(str, result))
                 results_file.write(output_builder + '\n')
 
@@ -63,17 +63,11 @@ def run_search(dict_file, postings_file, queries_file, results_file):
 # ====================================================================
 
 def get_query_term_weight(query_term, termIndex):
-    return calculate_term_frequency(query_term, termIndex) * calculate_inverse_document_frequency(query_term, termIndex)
+    global N
+    return 1 + math.log(termIndex[query_term], 10) * math.log(N/termIndex[query_term])
 
 def get_document_term_weight(document_term):
     return 1 + math.log(document_term, 10)
-
-def calculate_term_frequency(term, termIndex):
-    return 1 + math.log(termIndex[term], 10)
-
-def calculate_inverse_document_frequency(term, termIndex):
-    global N
-    return math.log(N/termIndex[term])
 
 def get_top_K_components(scores_dic, K):
     result = []
@@ -89,15 +83,22 @@ def get_top_K_components(scores_dic, K):
 # ====================== QUERY PROCESSING ======================
 # ==============================================================
 
-def process_query(query, dictionary, postings_file, _document_weights):
-    global N
+def process_query(query, dictionary, postings_file, document_normalization_factor):
     global K
     queryIndex = collections.defaultdict(lambda: 0)
-    query = query.strip().split()
     score_dic = collections.defaultdict(lambda: 0)
+
+    query = query.strip().split()
 
     for word in query:
         queryIndex[word] += 1
+
+    square_val_list = []
+    for word in queryIndex:
+        square_val_list.append(get_query_term_weight(word, queryIndex) ** 2)
+    square_val_list.sort()
+    square_sum = sum(square_val_list)
+    query_normalization_factor = math.sqrt(square_sum)
 
     for term in queryIndex:
         # for each word in the query, get the tf.idf
@@ -107,10 +108,8 @@ def process_query(query, dictionary, postings_file, _document_weights):
         # [documentId, frequency]
         for frequencyPair in postingList:
             document_term_weight = get_document_term_weight(frequencyPair[1])
-            # TODO: clarify here
-            document_normalized_weight = (document_term_weight / _document_weights[frequencyPair[0]])
-            query_normalized_weight = (query_term_weight / math.sqrt(query_term_weight * query_term_weight))
-            score_dic[frequencyPair[0]] += document_normalized_weight * query_normalized_weight
+            document_id = frequencyPair[0]
+            score_dic[document_id] += (document_term_weight / document_normalization_factor[document_id]) * (query_term_weight / query_normalization_factor)
     return get_top_K_components(score_dic, K)
 
 # ===================================================================

@@ -66,7 +66,7 @@ def build_index(in_dir, out_dict, out_postings):
     inFiles = sorted(os.listdir(in_dir), key=lambda x: int(x))
     index = collections.defaultdict(lambda: [])
     documentLength = collections.defaultdict(lambda: 0)
-    documentWeight = collections.defaultdict(lambda: 0)
+    documentNormalizationFactors = collections.defaultdict(lambda: 0)
 
     for inFile in inFiles:
         with open(os.path.join(in_dir, inFile), "r", encoding="utf-8") as f:
@@ -78,13 +78,16 @@ def build_index(in_dir, out_dict, out_postings):
                     termFreq[word] += 1
                     documentLength[int(inFile)] += 1
             
-            square_sum = 0
+            square_val_list = []
             for word in termFreq:
                 index[word].append([int(inFile), termFreq[word]])
-                square_sum += termFreq[word] * termFreq[word]
+                document_term_weight = 1 + math.log(termFreq[word], 10)
+                square_val_list.append(document_term_weight ** 2)
 
             # add the normalization factor for computation in search
-            documentWeight[int(inFile)] = math.sqrt(square_sum)
+            square_val_list.sort()
+            square_sum = sum(square_val_list)
+            documentNormalizationFactors[int(inFile)] = math.sqrt(square_sum)
 
     startIdx = 0
 
@@ -104,7 +107,7 @@ def build_index(in_dir, out_dict, out_postings):
         pickle.dump(dict(index), dictFile)
 
     with open("docData.txt", "wb") as docData:
-        pickle.dump(dict(documentWeight), docData)
+        pickle.dump(dict(documentNormalizationFactors), docData)
 
     # cleanup
     shutil.rmtree(TMP_DIR)
