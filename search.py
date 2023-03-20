@@ -66,8 +66,8 @@ def get_query_term_weight(query_term, termIndex):
     global N
     return 1 + math.log(termIndex[query_term], 10) * math.log(N/termIndex[query_term])
 
-def get_document_term_weight(document_term):
-    return 1 + math.log(document_term, 10)
+def get_document_term_weight(document_term_frequency):
+    return 1 + math.log(document_term_frequency, 10)
 
 def get_top_K_components(scores_dic, K):
     result = []
