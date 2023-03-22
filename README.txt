@@ -10,13 +10,32 @@ this assignment.
 overview
 
 The program consist of indexing the corpus and enabling the user to search
-through the processed corpus with the idf
+through the processed corpus. The main method of comparison is utilizing the consine score
+of each document with respect to the query. In addition, we convert each term in the query and documents
+into a standardized vector space model. 
+
+To explain the algorithm performed in the vector space model, we calculate the weights of each term in the
+query with respect to a document that contains the same query term. 
+
+The formula for weight calculation of the 1.query and 2. document is as such:
+
+1. term frequency (tf) . inverse document frequency (idf)
+2. term frequency (tf)
+This follows the lnc.ltc rule.
+
+Next, we calculate the normalization factor for the query and document, scaling each score by an amount ensures
+that that all the terms in both query and document are in the same space.
+
+Once all that is done, we calculate the cosine difference of a document with respect to a term in the query and
+sum the results to form a predictive score of similiary between the query and the document.
+
+Since we are only interested in the top K elements, we utilize a heap to retrieve the top K elements.
 
 == Files included with this submission ==
 
-index.py:
+index.py: Index the file and provide necessary information for the calculation of vector space model
 
-search.py:
+search.py: Token and parse each query term to identify similar documents with respect to the query
 
 == Statement of individual work ==
 
