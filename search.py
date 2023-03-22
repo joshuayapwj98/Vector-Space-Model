@@ -126,7 +126,7 @@ def process_query(query, dictionary, postings_file, document_term_weights_dict):
     return get_top_K_components(score_dict, K)
 
 def tokenize_query(query):
-    query = query.strip().split()
+    query = nltk.tokenize.word_tokenize(query.strip())
     terms = []
     stemmer = nltk.stem.PorterStemmer()
 
