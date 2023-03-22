@@ -38,8 +38,8 @@ def run_search(dict_file, postings_file, queries_file, results_file):
         dictionary = pickle.load(dict_file)
 
     with open("docData.txt", "rb") as doclen_file:
-        document_normalization_factor = pickle.load(doclen_file)
-        N = len(document_normalization_factor)
+        document_term_weights_dict = pickle.load(doclen_file)
+        N = len(document_term_weights_dict)
 
     with open(f'{queries_file}', "r") as queries_file,\
         open(f'{results_file}', "w") as results_file:
@@ -53,7 +53,8 @@ def run_search(dict_file, postings_file, queries_file, results_file):
                 # Empty line in queries.txt
                 results_file.write("\n")
             else:
-                result = process_query(query, dictionary, postings_file, document_normalization_factor)
+                stemmed_query = tokenize_query(query)
+                result = process_query(stemmed_query, dictionary, postings_file, document_term_weights_dict)
                 output_builder = ', '.join(map(str, result))
                 results_file.write(output_builder + '\n')
 
@@ -62,20 +63,23 @@ def run_search(dict_file, postings_file, queries_file, results_file):
 # ====================== RANKING PROCESSING ==========================
 # ====================================================================
 
-def get_query_term_weight(query_term, termIndex):
+def get_query_term_weight(query_term, termIndex, postings_list_len):
     global N
-    return 1 + math.log(termIndex[query_term], 10) * math.log(N/termIndex[query_term])
+    if postings_list_len == 0:
+        return 0
+    return (1 + math.log(termIndex[query_term], 10)) * math.log(N/postings_list_len)
 
 def get_document_term_weight(document_term_frequency):
     return 1 + math.log(document_term_frequency, 10)
-
+    
 def get_top_K_components(scores_dic, K):
     result = []
     score_tuples = [(-score, doc_id) for doc_id, score in scores_dic.items()]
+    
     heapq.heapify(score_tuples)
-    top_K = heapq.nlargest(K, score_tuples)
-    for tuple in top_K:
-        result.append(tuple[1])
+    for i in range(K):
+        tuple_result = heapq.heappop(score_tuples)
+        result.append(tuple_result[1])
 
     return result
 
@@ -83,34 +87,54 @@ def get_top_K_components(scores_dic, K):
 # ====================== QUERY PROCESSING ======================
 # ==============================================================
 
-def process_query(query, dictionary, postings_file, document_normalization_factor):
+def process_query(query, dictionary, postings_file, document_term_weights_dict):
     global K
     queryIndex = collections.defaultdict(lambda: 0)
-    score_dic = collections.defaultdict(lambda: 0)
-
-    query = query.strip().split()
+    query_weight_dict = collections.defaultdict(lambda: 0)
+    
+    score_dict = collections.defaultdict(lambda: 0)
 
     for word in query:
         queryIndex[word] += 1
 
     square_val_list = []
+    # Get all the sum of (query weight)^2
     for word in queryIndex:
-        square_val_list.append(get_query_term_weight(word, queryIndex) ** 2)
+        postingList = single_word_query(word, dictionary, postings_file)
+        query_term_weight = get_query_term_weight(word, queryIndex, len(postingList))
+        query_weight_dict[word] = query_term_weight
+        square_val_list.append(query_term_weight ** 2)
+    
     square_val_list.sort()
     square_sum = sum(square_val_list)
+
+    # Get the query normalization factor 
     query_normalization_factor = math.sqrt(square_sum)
 
     for term in queryIndex:
-        # for each word in the query, get the tf.idf
-        query_term_weight = get_query_term_weight(term, queryIndex)
+        # get normalised query vector item
         postingList = single_word_query(term, dictionary, postings_file)
+        query_term_weight = query_weight_dict[term]
+        query_term_weight /= query_normalization_factor
 
+        # get normalised document vector item, then add score
         # [documentId, frequency]
         for frequencyPair in postingList:
-            document_term_weight = get_document_term_weight(frequencyPair[1])
-            document_id = frequencyPair[0]
-            score_dic[document_id] += (document_term_weight / document_normalization_factor[document_id]) * (query_term_weight / query_normalization_factor)
-    return get_top_K_components(score_dic, K)
+            currScore = document_term_weights_dict[frequencyPair[0]][term] * query_term_weight
+            score_dict[frequencyPair[0]] += currScore
+
+    return get_top_K_components(score_dict, K)
+
+def tokenize_query(query):
+    query = query.strip().split()
+    terms = []
+    stemmer = nltk.stem.PorterStemmer()
+
+    for term in query:
+        stemmed = stemmer.stem(term.lower())
+        terms.append(stemmed)
+    
+    return terms
 
 # ===================================================================
 # ====================== ACCESS INDEXING FILES ======================
@@ -125,8 +149,6 @@ def single_word_query(word, dictionary, postings_file):
     Returns: a list object consisting of all the documents posting of the words 
     in the dictonary. 
     """
-    stemmer = nltk.stem.PorterStemmer()
-    word = stemmer.stem(word.lower())  # case folding and stemming
 
     # -1 means that the word doesn't exist
     [_, [start, sz]] = dictionary.get(word, [-1, [-1, -1]])

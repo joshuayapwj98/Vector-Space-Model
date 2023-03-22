@@ -64,14 +64,15 @@ def build_index(in_dir, out_dict, out_postings):
 
     in_dir = TMP_DIR  # change the input directory to the processed documents folder
     inFiles = sorted(os.listdir(in_dir), key=lambda x: int(x))
-    index = collections.defaultdict(lambda: [])
+
     documentLength = collections.defaultdict(lambda: 0)
-    documentNormalizationFactors = collections.defaultdict(lambda: 0)
+    
+    index = collections.defaultdict(lambda: [])
+    document_term_weight_dict = collections.defaultdict(dict)
 
     for inFile in inFiles:
         with open(os.path.join(in_dir, inFile), "r", encoding="utf-8") as f:
             termFreq = collections.defaultdict(lambda: 0)
-
             for line in f:
                 words = line.split()
                 for word in words:
@@ -82,12 +83,17 @@ def build_index(in_dir, out_dict, out_postings):
             for word in termFreq:
                 index[word].append([int(inFile), termFreq[word]])
                 document_term_weight = 1 + math.log(termFreq[word], 10)
+                document_term_weight_dict[int(inFile)][word] = document_term_weight
                 square_val_list.append(document_term_weight ** 2)
 
-            # add the normalization factor for computation in search
+            # Calculate the normalization factor for each term in the document
             square_val_list.sort()
             square_sum = sum(square_val_list)
-            documentNormalizationFactors[int(inFile)] = math.sqrt(square_sum)
+            document_normalization_factor = math.sqrt(square_sum)
+
+            # Update the value of each term in the document with the normalized factor 
+            for key in document_term_weight_dict[int(inFile)]:
+                document_term_weight_dict[int(inFile)][key] /= document_normalization_factor
 
     startIdx = 0
 
@@ -107,7 +113,7 @@ def build_index(in_dir, out_dict, out_postings):
         pickle.dump(dict(index), dictFile)
 
     with open("docData.txt", "wb") as docData:
-        pickle.dump(dict(documentNormalizationFactors), docData)
+        pickle.dump(dict(document_term_weight_dict), docData)
 
     # cleanup
     shutil.rmtree(TMP_DIR)

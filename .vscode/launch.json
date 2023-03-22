@@ -12,7 +12,8 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": ["-d", "dictionary.txt", "-p", "postings.txt", "-q", "queries.txt", "-o", "results.txt"]
-            // "args": ["-i", "/Users/joshuayap/nltk_data/corpora/reuters/training", "-d", "dictionary.txt", "-p", "postings.txt"]
+            // "args": ["-i", "/Users/joshuayap/nltk_data/corpora/reuters/sub_training", "-d", "dictionary.txt", "-p", "postings.txt"]
+            // "args": ["-i", "./reuters/sub_training", "-d", "dictionary.txt", "-p", "postings.txt"]
         }
     ]
 }
